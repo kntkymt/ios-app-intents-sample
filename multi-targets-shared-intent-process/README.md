@@ -30,7 +30,7 @@ Although the sample uses a widget, the same behavior appears to apply to other a
 
 | Rule 1 | Rule 2 | Rule 3 | 
 |---|---|---|
-|<video width=300 src="./evidence1.mp4">|<video width=300 src="./evidence2.mp4">|<video width=300 src="./evidence3.mp4">|
+|<video width=300 src="https://github.com/user-attachments/assets/599fea0a-98b9-4384-a2cc-fad156619aa6">|<video width=300 src="https://github.com/user-attachments/assets/cbda96ea-3922-4ead-9c89-dc61ae94d679">|<video width=300 src="https://github.com/user-attachments/assets/0367507e-4b99-44a3-9e36-a0b3958e2291">|
 
 ### Rule 1
 - triggered `OpenIntent` from shortcut while app is alive. 
