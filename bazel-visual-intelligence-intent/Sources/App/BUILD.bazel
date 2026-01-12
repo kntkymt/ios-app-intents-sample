@@ -1,0 +1,31 @@
+load("@build_bazel_rules_apple//apple:ios.bzl", "ios_application")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+
+swift_library(
+    name = "AppLib",
+    srcs = [
+        "App.swift",
+        "ContentView.swift",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+ios_application(
+    name = "App",
+    bundle_id = "kntk.bazelvisualintelligenceintent",
+    provisioning_profile = ":app.mobileprovision",
+    families = [
+        "iphone",
+        "ipad",
+    ],
+    infoplists = ["Info.plist"],
+    app_intents = [
+        "//Sources/VisualIntelligenceIntent:VisualIntelligenceIntent"
+    ],
+    minimum_os_version = "26.0",
+    deps = [
+        ":AppLib", 
+        "//Sources/VisualIntelligenceIntent:VisualIntelligenceIntent"
+    ],
+    visibility = ["//visibility:public"],
+)
