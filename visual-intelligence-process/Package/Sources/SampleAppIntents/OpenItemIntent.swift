@@ -1,4 +1,5 @@
 import AppIntents
+import UIKit
 
 // entities returned by visual search queries must be associated with an OpenIntent.
 public struct OpenItemIntent: OpenIntent {
@@ -20,8 +21,9 @@ public struct OpenItemIntent: OpenIntent {
         false
     }
 
+    @MainActor
     public func perform() async throws -> some IntentResult {
-        await logger.trace()
+        logger.trace()
         return .result()
     }
 }

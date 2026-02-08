@@ -2,8 +2,6 @@ import AppIntents
 
 public struct ItemEntity: AppEntity {
     public var item: Item
-    // 50kb
-    public var data: [51_200 of UInt8] = .init(repeating: 0)
 
     public var id: Int {
         item.id
@@ -21,13 +19,31 @@ public struct ItemEntity: AppEntity {
 
     public var displayRepresentation: DisplayRepresentation {
         DisplayRepresentation(
-            title: "\(item.name)",
-            subtitle: "pid: \(item.pid)",
+            title: "\(displayTitle)",
+            subtitle: "\(displaySubTitle)",
             image: item.thumbnailURLs.first.map { .init(url: $0) }
         )
     }
 
     public static let defaultQuery = ItemEntityQuery()
+}
+
+private extension ItemEntity {
+    var displayTitle: AttributedString {
+        var string = AttributedString(item.name)
+        string.font = .footnote
+
+        return string
+    }
+
+    var displaySubTitle: AttributedString {
+        var string = AttributedString("¥" + item.price.description)
+        string[string.range(of: "¥")!].font = .footnote
+        string.foregroundColor = .primary
+        string[string.range(of: item.price.description)!].font = .body
+
+        return string
+    }
 }
 
 public struct ItemEntityQuery: EntityQuery {
@@ -44,10 +60,12 @@ public struct ItemEntityQuery: EntityQuery {
         await logger.trace()
         return identifiers
             .lazy
-            .compactMap { id in
-                SampleAppIntents.Item.stub.first { $0.id == id }
-            }.map {
-                ItemEntity(item: $0)
+            .map {
+                ItemEntity(item: .init(id: $0))
             }
+    }
+
+    public func suggestedEntities() async throws -> [ItemEntity] {
+        SampleAppIntents.Item.stub.map(ItemEntity.init)
     }
 }

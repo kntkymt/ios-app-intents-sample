@@ -34,12 +34,30 @@ struct VisualIntelligenceIntentValueQuery: IntentValueQuery {
     func values(for input: SemanticContentDescriptor) async throws -> [ItemEntity] {
         await logger.trace()
 
-//        return Item.stub.map(ItemEntity.init)
+        let image: UIImage? = {
+            guard let cvPixelBuffer = input.pixelBuffer else {
+                return nil
+            }
 
-        return (0..<1024).map {
+            let ciImage = cvPixelBuffer.withUnsafeBuffer { cvPixelBuffer in
+                CIImage(cvPixelBuffer: cvPixelBuffer)
+            }
+            guard let cgImage = CIContext().createCGImage(ciImage, from: ciImage.extent) else {
+                return nil
+            }
+
+            return UIImage(cgImage: cgImage)
+        }()
+
+        if let image {
+            await logger.addImage(image)
+        }
+
+        return (0..<30).map {
             ItemEntity(item: Item(id: $0))
         }
     }
 }
+
 
 #endif

@@ -28,7 +28,7 @@ public extension Item {
         self.init(
             id: id,
             name: "Stub",
-            price: 300,
+            price: Int.random(in: 300...50000),
             thumbnailURLs: [],
             pid: String(describing: ProcessInfo().processIdentifier)
         )
