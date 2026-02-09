@@ -1,0 +1,10 @@
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+
+swift_library(
+    name = "FirstAppIntent",
+    srcs = [
+        "FirstAppIntent.swift",
+    ],
+    linkopts = ["-Wl,-framework,AppIntents"],
+    visibility = ["//visibility:public"],
+)

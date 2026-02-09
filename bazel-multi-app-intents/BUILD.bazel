@@ -1,0 +1,7 @@
+load("@build_bazel_rules_xcodeproj//xcodeproj:defs.bzl", "xcodeproj")
+
+xcodeproj(
+    name = "xcodeproj",
+    project_name = "BazelMultiAppIntents",
+    top_level_targets = ["//Sources/App:App"],
+)

@@ -1,0 +1,32 @@
+load("@build_bazel_rules_apple//apple:ios.bzl", "ios_application")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+
+swift_library(
+    name = "AppLib",
+    srcs = [
+        "App.swift",
+        "ContentView.swift",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+ios_application(
+    name = "App",
+    bundle_id = "kntk.bazelmultiappintents",
+    families = [
+        "iphone",
+        "ipad",
+    ],
+    infoplists = ["Info.plist"],
+    app_intents = [
+        "//Sources/FirstAppIntent:FirstAppIntent",
+        "//Sources/SecondAppIntent:SecondAppIntent",
+    ],
+    minimum_os_version = "17.0",
+    deps = [
+        ":AppLib",
+        "//Sources/FirstAppIntent:FirstAppIntent",
+        "//Sources/SecondAppIntent:SecondAppIntent",
+    ],
+    visibility = ["//visibility:public"],
+)
