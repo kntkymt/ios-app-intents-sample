@@ -19,14 +19,14 @@ ios_application(
     ],
     infoplists = ["Info.plist"],
     app_intents = [
+        "//Sources/AppShortcuts:AppShortcuts",
         "//Sources/FirstAppIntent:FirstAppIntent",
         "//Sources/SecondAppIntent:SecondAppIntent",
     ],
     minimum_os_version = "17.0",
     deps = [
         ":AppLib",
-        "//Sources/FirstAppIntent:FirstAppIntent",
-        "//Sources/SecondAppIntent:SecondAppIntent",
+        "//Sources/AppShortcuts:AppShortcuts",
     ],
     visibility = ["//visibility:public"],
 )

@@ -1,0 +1,14 @@
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+
+swift_library(
+    name = "AppShortcuts",
+    srcs = [
+        "AppShortcuts.swift",
+    ],
+    deps = [
+        "//Sources/FirstAppIntent:FirstAppIntent",
+        "//Sources/SecondAppIntent:SecondAppIntent",
+    ],
+    linkopts = ["-Wl,-framework,AppIntents"],
+    visibility = ["//visibility:public"],
+)
