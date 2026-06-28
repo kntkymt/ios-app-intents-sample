@@ -31,6 +31,7 @@ struct VisualIntelligenceIntentValueQuery: IntentValueQuery {
     @Dependency
     var logger: Logger
 
+    @MainActor
     func values(for input: SemanticContentDescriptor) async throws -> [ItemEntity] {
         await logger.trace()
 
