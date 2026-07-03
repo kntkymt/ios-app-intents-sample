@@ -2,21 +2,21 @@ import AppIntents
 import FirstAppIntent
 import Intermediate
 
-public struct ParentIntent: AppIntent {
-    public static let title: LocalizedStringResource = "Parent Intent"
-    public static let description = IntentDescription(
+struct ParentIntent: AppIntent {
+    static let title: LocalizedStringResource = "Parent Intent"
+    static let description = IntentDescription(
         "An intent returning an AppEntity declared in a dependency module.")
 
-    public init() {}
+    init() {}
 
-    public func perform() async throws -> some IntentResult & ReturnsValue<CounterEntity> {
+    func perform() async throws -> some IntentResult & ReturnsValue<CounterEntity> {
         let _ = IntermediateHelper()
         return .result(value: CounterEntity(id: "parent"))
     }
 }
 
-public struct MultiAppShortcuts: AppShortcutsProvider {
-    public static var appShortcuts: [AppShortcut] {
+struct MultiAppShortcuts: AppShortcutsProvider {
+    static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: ParentIntent(),
             phrases: [
@@ -26,6 +26,4 @@ public struct MultiAppShortcuts: AppShortcutsProvider {
             systemImageName: "1.circle"
         )
     }
-
-    public init() {}
 }

@@ -5,7 +5,7 @@ bazel_dep(
 )
 bazel_dep(
     name = "rules_apple",
-    version = "4.5.0",
+    version = "4.5.3",
     repo_name = "build_bazel_rules_apple",
 )
 bazel_dep(
@@ -14,6 +14,9 @@ bazel_dep(
     repo_name = "build_bazel_rules_swift",
 )
 
+# Patch rules_apple with transitive App Intents metadata support: App Intents metadata is
+# recursively generated for the dependency modules of the module passed to `app_intents`, and
+# merged via the appintentsmetadataprocessor --static-metadata-file-list option (Xcode 26+).
 single_version_override(
     module_name = "rules_apple",
     patch_strip = 1,

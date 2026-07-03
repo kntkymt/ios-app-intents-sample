@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "Package",
     platforms: [
-        .iOS(.v17),
+        .iOS(.v18),
     ],
     products: [
         .library(
@@ -12,8 +12,8 @@ let package = Package(
             targets: ["FirstAppIntent"]
         ),
         .library(
-            name: "SecondAppIntent",
-            targets: ["SecondAppIntent"]
+            name: "Intermediate",
+            targets: ["Intermediate"]
         ),
     ],
     targets: [
@@ -21,7 +21,17 @@ let package = Package(
             name: "FirstAppIntent"
         ),
         .target(
+            name: "Intermediate",
+            dependencies: [
+                "BookAppIntent",
+                "SecondAppIntent",
+            ]
+        ),
+        .target(
             name: "SecondAppIntent"
+        ),
+        .target(
+            name: "BookAppIntent"
         ),
     ]
 )

@@ -1,11 +1,11 @@
 load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
 
 swift_library(
-    name = "SecondAppIntent",
+    name = "BookAppIntent",
     srcs = [
-        "SecondAppIntent.swift",
+        "BookAppIntent.swift",
     ],
     linkopts = ["-Wl,-framework,AppIntents"],
-    module_name = "SecondAppIntent",
+    module_name = "BookAppIntent",
     visibility = ["//visibility:public"],
 )

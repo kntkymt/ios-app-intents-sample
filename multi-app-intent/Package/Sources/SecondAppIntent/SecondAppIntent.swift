@@ -10,3 +10,17 @@ public struct SecondAppIntent: AppIntent {
         .result(dialog: "Second intent executed")
     }
 }
+
+@AssistantIntent(schema: .system.search)
+public struct TransitiveSearchIntent: ShowInAppSearchResultsIntent {
+    public static let searchScopes: [StringSearchScope] = [.general]
+
+    @Parameter
+    public var criteria: StringSearchCriteria
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult {
+        .result()
+    }
+}

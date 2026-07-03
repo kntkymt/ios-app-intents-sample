@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		A10000000000000000000001 /* FirstAppIntent in Frameworks */ = {isa = PBXBuildFile; productRef = A1000000000000000000000E /* FirstAppIntent */; };
-		A10000000000000000000002 /* SecondAppIntent in Frameworks */ = {isa = PBXBuildFile; productRef = A1000000000000000000000F /* SecondAppIntent */; };
+		A10000000000000000000002 /* Intermediate in Frameworks */ = {isa = PBXBuildFile; productRef = A1000000000000000000000F /* Intermediate */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,7 +30,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000001 /* FirstAppIntent in Frameworks */,
-				A10000000000000000000002 /* SecondAppIntent in Frameworks */,
+				A10000000000000000000002 /* Intermediate in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -75,7 +75,7 @@
 			name = "multi-app-intent";
 			packageProductDependencies = (
 				A1000000000000000000000E /* FirstAppIntent */,
-				A1000000000000000000000F /* SecondAppIntent */,
+				A1000000000000000000000F /* Intermediate */,
 			);
 			productName = "multi-app-intent";
 			productReference = A10000000000000000000003 /* multi-app-intent.app */;
@@ -150,7 +150,7 @@
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_OPTIMIZATION_LEVEL = 0;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
@@ -167,7 +167,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				GCC_C_LANGUAGE_STANDARD = gnu17;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
@@ -189,7 +189,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -218,7 +218,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -267,9 +267,9 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = FirstAppIntent;
 		};
-		A1000000000000000000000F /* SecondAppIntent */ = {
+		A1000000000000000000000F /* Intermediate */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = SecondAppIntent;
+			productName = Intermediate;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

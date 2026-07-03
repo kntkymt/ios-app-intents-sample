@@ -1,35 +1,260 @@
+diff --git a/apple/internal/aspects/app_intents_aspect.bzl b/apple/internal/aspects/app_intents_aspect.bzl
+index 6520de1..b71beb8 100644
+--- a/apple/internal/aspects/app_intents_aspect.bzl
++++ b/apple/internal/aspects/app_intents_aspect.bzl
+@@ -14,14 +14,14 @@
+ 
+ """Implementation of the aspect that propagates AppIntentsInfo providers."""
+ 
+-load(
+-    "@bazel_skylib//lib:collections.bzl",
+-    "collections",
+-)
+ load(
+     "@build_bazel_apple_support//lib:apple_support.bzl",
+     "apple_support",
+ )
++load(
++    "@bazel_skylib//lib:collections.bzl",
++    "collections",
++)
+ load(
+     "@build_bazel_rules_swift//swift:module_name.bzl",
+     "derive_swift_module_name",
+@@ -38,15 +38,29 @@ load(
+ 
+ def _app_intents_aspect_impl(target, ctx):
+     """Implementation of the swift source files propation aspect."""
++    dep_targets = getattr(ctx.rule.attr, "deps", []) + getattr(ctx.rule.attr, "private_deps", [])
++    transitive_dependency_metadata = [
++        dep_target[AppIntentsInfo].transitive_dependency_metadata
++        for dep_target in dep_targets
++        if AppIntentsInfo in dep_target
++    ]
++
+     if ctx.rule.kind != "swift_library":
+-        return []
++        if not transitive_dependency_metadata:
++            return []
+ 
+-    sdk_frameworks = cc_info_support.get_sdk_frameworks(deps = [target], include_weak = True)
+-    if "AppIntents" not in sdk_frameworks.to_list():
+-        fail(
+-            "Target '%s' does not depend on the AppIntents SDK framework. " % target.label +
+-            "Found the following SDK frameworks: %s" % sdk_frameworks.to_list(),
+-        )
++        # Forward App Intents metadata found on dependencies through non-swift_library targets.
++        return [
++            AppIntentsInfo(
++                intent_module_names = [],
++                swift_source_files = [],
++                swiftconstvalues_files = [],
++                transitive_dependency_metadata = depset(
++                    order = "postorder",
++                    transitive = transitive_dependency_metadata,
++                ),
++            ),
++        ]
+ 
+     swiftconstvalues_files = []
+     module_names = collections.uniq([x.name for x in target[SwiftInfo].direct_modules if x.swift])
+@@ -56,16 +70,47 @@ def _app_intents_aspect_impl(target, ctx):
+     if xcode_version_config.xcode_version() >= apple_common.dotted_version("15.0"):
+         swiftconstvalues_files = target[OutputGroupInfo]["const_values"].to_list()
+ 
++    # Only inspect SDK frameworks declared by the target itself, so that AppIntents linkage
++    # declared by transitive dependencies does not mark every intermediate module as an App
++    # Intents module.
++    directly_linked_sdk_frameworks = cc_info_support.get_sdk_frameworks(
++        deps = [target],
++        include_weak = True,
++        owned_only = True,
++    )
++
++    direct_dependency_metadata = []
++    if "AppIntents" in directly_linked_sdk_frameworks.to_list():
++        dependency_module_names = [
++            dependency_metadata.module_name
++            for dependency_metadata in depset(
++                order = "postorder",
++                transitive = transitive_dependency_metadata,
++            ).to_list()
++        ]
++        direct_dependency_metadata.append(struct(
++            module_name = module_names[0],
++            swift_source_files = tuple(ctx.rule.files.srcs),
++            swiftconstvalues_files = tuple(swiftconstvalues_files),
++            dependency_module_names = tuple(dependency_module_names),
++        ))
++
+     return [
+         AppIntentsInfo(
+             intent_module_names = module_names,
+             swift_source_files = ctx.rule.files.srcs,
+             swiftconstvalues_files = swiftconstvalues_files,
++            transitive_dependency_metadata = depset(
++                direct_dependency_metadata,
++                order = "postorder",
++                transitive = transitive_dependency_metadata,
++            ),
+         ),
+     ]
+ 
+ app_intents_aspect = aspect(
+     implementation = _app_intents_aspect_impl,
++    attr_aspects = ["deps", "private_deps"],
+     # The only attrs required for this aspect are for the `xcode_version` >= 15.0 check above.
+     attrs = apple_support.action_required_attrs(),
+     doc = "Collects Swift source files from swift_library targets required by AppIntents tooling.",
+diff --git a/apple/internal/cc_info_support.bzl b/apple/internal/cc_info_support.bzl
+index 25f87b6..06c64ea 100644
+--- a/apple/internal/cc_info_support.bzl
++++ b/apple/internal/cc_info_support.bzl
+@@ -37,13 +37,16 @@ def _get_all_deps(*, deps, split_deps_keys = []):
+         all_deps += deps[split_deps_key]
+     return all_deps
+ 
+-def _get_sdk_frameworks(*, deps, split_deps_keys = [], include_weak = False):
++def _get_sdk_frameworks(*, deps, split_deps_keys = [], include_weak = False, owned_only = False):
+     """Returns a depset of SDK frameworks linked to dependencies.
+ 
+     Args:
+         deps: Label list of (split) dependencies to traverse.
+         split_deps_keys: (optional) List of split attribute keys to use on split deps.
+         include_weak: include weak frameworks in the depset
++        owned_only: (optional) If True, only SDK frameworks declared by the dependencies
++            themselves are returned, excluding SDK frameworks linked by their transitive
++            dependencies.
+     Returns
+         Depset of SDK framework strings linked to dependencies.
+     """
+@@ -54,6 +57,8 @@ def _get_sdk_frameworks(*, deps, split_deps_keys = [], include_weak = False):
+         if not CcInfo in dep:
+             continue
+         for linker_input in dep[CcInfo].linking_context.linker_inputs.to_list():
++            if owned_only and linker_input.owner != dep.label:
++                continue
+             for index, user_link_flag in enumerate(linker_input.user_link_flags):
+                 if (user_link_flag == "-framework" or
+                     (include_weak and user_link_flag == "-weak_framework")):
 diff --git a/apple/internal/partials/app_intents_metadata_bundle.bzl b/apple/internal/partials/app_intents_metadata_bundle.bzl
-index f013ead9..1de40bfc 100644
+index f013ead..f502c86 100644
 --- a/apple/internal/partials/app_intents_metadata_bundle.bzl
 +++ b/apple/internal/partials/app_intents_metadata_bundle.bzl
-@@ -16,7 +16,6 @@
+@@ -16,7 +16,7 @@
  
  load("@bazel_skylib//lib:partial.bzl", "partial")
  load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 -load("//apple/internal:intermediates.bzl", "intermediates")
++load("//apple/internal:cc_info_support.bzl", "cc_info_support")
  load("//apple/internal:processor.bzl", "processor")
  load(
      "//apple/internal/providers:app_intents_info.bzl",
-@@ -48,9 +47,14 @@ def _app_intents_metadata_bundle_partial_impl(
+@@ -27,6 +27,73 @@ load(
+     "generate_app_intents_metadata_bundle",
+ )
  
-     metadata_bundle = None
-     if platform_prerequisites.xcode_version_config.xcode_version() >= apple_common.dotted_version("26.0"):
++def _generate_dependency_metadata_bundles(
++        *,
++        actions,
++        deps,
++        label,
++        platform_prerequisites,
++        root_module_names,
++        target_triples,
++        json_tool):
++    """Generates a Metadata.appintents bundle for each transitive App Intents dependency module.
++
++    Mirroring the behavior of xcodebuild, each metadata bundle for a statically linked dependency
++    module is generated with the metadata bundles of its own transitive dependencies passed via
++    `--static-metadata-file-list`, so App Intents type references across modules can be resolved.
++
++    Args:
++        actions: The actions provider from ctx.actions.
++        deps: List of dependencies implementing the AppIntents protocol for a single split.
++        label: Label of the target being built.
++        platform_prerequisites: Struct containing information on the platform being targeted.
++        root_module_names: List of module names handled by the root metadata bundle, which must be
++            excluded from dependency metadata bundle generation.
++        target_triples: List of Apple target triples from `CcToolchainInfo` providers.
++        json_tool: A `files_to_run` wrapping Python's `json.tool` module.
++    Returns:
++        List of Files referencing the Metadata.appintents bundles of all transitive dependency
++        modules, ordered so that dependencies appear before their dependents.
++    """
++    dependency_metadata = depset(
++        order = "postorder",
++        transitive = [
++            dep[AppIntentsInfo].transitive_dependency_metadata
++            for dep in deps
++        ],
++    ).to_list()
++
++    # Iterating in postorder guarantees that the metadata bundles for the dependencies of a given
++    # module have already been generated when that module's own bundle is generated.
++    metadata_bundles_by_module_name = {}
++    for metadata in dependency_metadata:
++        if metadata.module_name in root_module_names:
++            continue
++        if metadata.module_name in metadata_bundles_by_module_name:
++            continue
++        metadata_bundles_by_module_name[metadata.module_name] = (
++            generate_app_intents_metadata_bundle(
++                actions = actions,
++                apple_fragment = platform_prerequisites.apple_fragment,
++                constvalues_files = list(metadata.swiftconstvalues_files),
++                dependency_metadata_bundles = [
++                    metadata_bundles_by_module_name[module_name]
++                    for module_name in metadata.dependency_module_names
++                    if module_name in metadata_bundles_by_module_name
++                ],
++                intents_module_names = [metadata.module_name],
++                is_dependency_module = True,
++                label = label.relative("{}_{}".format(label.name, metadata.module_name)),
++                platform_prerequisites = platform_prerequisites,
++                source_files = list(metadata.swift_source_files),
++                target_triples = target_triples,
++                xcode_version_config = platform_prerequisites.xcode_version_config,
++                json_tool = json_tool,
++            )
++        )
++
++    return metadata_bundles_by_module_name.values()
++
+ def _app_intents_metadata_bundle_partial_impl(
+         *,
+         actions,
+@@ -46,90 +113,64 @@ def _app_intents_metadata_bundle_partial_impl(
+     # available archs.
+     first_cc_toolchain_key = cc_toolchains.keys()[0]
+ 
+-    metadata_bundle = None
+-    if platform_prerequisites.xcode_version_config.xcode_version() >= apple_common.dotted_version("26.0"):
 -        per_dep_metadata_bundles = []
 -        for dep in deps[first_cc_toolchain_key]:
 -            per_dep_metadata_bundles.append(
-+        # appintentsmetadataprocessor does not populate AppShortcutsProvider coming from dependency metadata bundles,
-+        # so treat the first app_intents dependency as the primary library that supports AppShortcutsProvider and merge the remaining libraries into it.
-+        # This preserves compatibility with the previous behavior where only a single app_intents module was supported for Shortcuts and Intents.
-+        primary_library = deps[first_cc_toolchain_key][0]
-+
-+        dependency_metadata_bundles = []
-+        for dep in deps[first_cc_toolchain_key][1:]:
-+            dependency_metadata_bundles.append(
-                 generate_app_intents_metadata_bundle(
-                     actions = actions,
-                     apple_fragment = platform_prerequisites.apple_fragment,
-@@ -69,30 +73,15 @@ def _app_intents_metadata_bundle_partial_impl(
-                 ),
+-                generate_app_intents_metadata_bundle(
+-                    actions = actions,
+-                    apple_fragment = platform_prerequisites.apple_fragment,
+-                    constvalues_files = dep[AppIntentsInfo].swiftconstvalues_files,
+-                    intents_module_names = dep[AppIntentsInfo].intent_module_names,
+-                    label = label.relative(label.name + dep[AppIntentsInfo].intent_module_names[0]),
+-                    dependency_metadata_bundles = [],
+-                    platform_prerequisites = platform_prerequisites,
+-                    source_files = dep[AppIntentsInfo].swift_source_files,
+-                    target_triples = [
+-                        cc_toolchain[cc_common.CcToolchainInfo].target_gnu_system_name
+-                        for cc_toolchain in cc_toolchains.values()
+-                    ],
+-                    xcode_version_config = platform_prerequisites.xcode_version_config,
+-                    json_tool = json_tool,
+-                ),
++    for dep in deps[first_cc_toolchain_key]:
++        sdk_frameworks = cc_info_support.get_sdk_frameworks(deps = [dep], include_weak = True)
++        if "AppIntents" not in sdk_frameworks.to_list():
++            fail(
++                "Target '%s' does not depend on the AppIntents SDK framework. " % dep.label +
++                "Found the following SDK frameworks: %s" % sdk_frameworks.to_list(),
              )
  
 -        # Merge multiple intent metadatas into a single.
@@ -47,248 +272,252 @@ index f013ead9..1de40bfc 100644
 -        )
 -        actions.write(output = dummy_source_file, content = "")
 -        actions.write(output = dummy_constvalues_file, content = "[]")
-         metadata_bundle = generate_app_intents_metadata_bundle(
-             actions = actions,
-             apple_fragment = platform_prerequisites.apple_fragment,
+-        metadata_bundle = generate_app_intents_metadata_bundle(
+-            actions = actions,
+-            apple_fragment = platform_prerequisites.apple_fragment,
 -            constvalues_files = [dummy_constvalues_file],
 -            intents_module_names = ["{}AppIntents".format(label.name)],
-+            constvalues_files = primary_library[AppIntentsInfo].swiftconstvalues_files,
-+            intents_module_names = primary_library[AppIntentsInfo].intent_module_names,
-             label = label,
+-            label = label,
 -            dependency_metadata_bundles = per_dep_metadata_bundles,
-+            dependency_metadata_bundles = dependency_metadata_bundles,
-             platform_prerequisites = platform_prerequisites,
+-            platform_prerequisites = platform_prerequisites,
 -            source_files = [dummy_source_file],
-+            source_files = primary_library[AppIntentsInfo].swift_source_files,
-             target_triples = [
-                 cc_toolchain[cc_common.CcToolchainInfo].target_gnu_system_name
-                 for cc_toolchain in cc_toolchains.values()
-diff --git a/apple/internal/rule_attrs.bzl b/apple/internal/rule_attrs.bzl
-index 340e7ad7..aaa4aed2 100644
---- a/apple/internal/rule_attrs.bzl
-+++ b/apple/internal/rule_attrs.bzl
-@@ -101,7 +101,12 @@ def _app_intents_attrs(*, deps_cfg):
-     """
-     return {
-         "app_intents": attr.label_list(
--            doc = "List of dependencies implementing the AppIntents protocol.",
-+            doc = """List of dependencies implementing the AppIntents protocol.
+-            target_triples = [
+-                cc_toolchain[cc_common.CcToolchainInfo].target_gnu_system_name
+-                for cc_toolchain in cc_toolchains.values()
+-            ],
+-            xcode_version_config = platform_prerequisites.xcode_version_config,
+-            json_tool = json_tool,
+-        )
+-    else:
+-        metadata_bundle = generate_app_intents_metadata_bundle(
++    target_triples = [
++        cc_toolchain[cc_common.CcToolchainInfo].target_gnu_system_name
++        for cc_toolchain in cc_toolchains.values()
++    ]
 +
-+Multiple app_intents dependencies are supported on Xcode 26 and later. If
-+multiple dependencies are provided, AppShortcutsProvider is recognized only
-+when it is defined in the first dependency.
-+""",
-             cfg = deps_cfg,
-             aspects = [app_intents_aspect],
-             providers = [SwiftInfo],
-diff --git a/doc/rules-ios.md b/doc/rules-ios.md
-index c7524c3a..88cee642 100644
---- a/doc/rules-ios.md
-+++ b/doc/rules-ios.md
-@@ -87,7 +87,7 @@ Builds and bundles an iOS Application.
- | <a id="ios_application-alternate_icons"></a>alternate_icons |  Files that comprise the alternate app icons for the application. Each file must have a containing directory named after the alternate icon identifier.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="ios_application-app_clips"></a>app_clips |  A list of iOS app clips to include in the final application bundle.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="ios_application-app_icons"></a>app_icons |  Files that comprise the app icons for the application. Each file must have a containing directory named `*..xcassets/*..appiconset` and there may be only one such `..appiconset` directory in the list. In Xcode 26+ for iOS/macOS/watchOS, an `*.icon` bundle can be provided along with the `*..xcassets` bundle to support 26 and pre-26 Apple OS rendering.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
--| <a id="ios_application-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
-+| <a id="ios_application-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.<br><br>Multiple app_intents dependencies are supported on Xcode 26 and later. If multiple dependencies are provided, AppShortcutsProvider is recognized only when it is defined in the first dependency.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="ios_application-bundle_id"></a>bundle_id |  The bundle ID (reverse-DNS path followed by app name) for this target. Only use this attribute if the bundle ID is not intended to be composed through an assigned base bundle ID rule found within `signed_capabilities`.   | String | optional |  `""`  |
- | <a id="ios_application-bundle_id_suffix"></a>bundle_id_suffix |  A string to act as the suffix of the composed bundle ID. If this target's bundle ID is composed from a base bundle ID rule found within `signed_capabilities`, then this string will be appended to the end of the bundle ID following a "." separator.   | String | optional |  `"_"`  |
- | <a id="ios_application-bundle_name"></a>bundle_name |  The desired name of the bundle (without the extension). If this attribute is not set, then the name of the target will be used instead.   | String | optional |  `""`  |
-@@ -240,7 +240,7 @@ However, iOS 14 introduced Widget Extensions that use a traditional `main` entry
- | <a id="ios_extension-resources"></a>resources |  A list of resources or files bundled with the bundle. The resources will be stored in the appropriate resources location within the bundle.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="ios_extension-additional_linker_inputs"></a>additional_linker_inputs |  A list of input files to be passed to the linker.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="ios_extension-app_icons"></a>app_icons |  Files that comprise the app icons for the application. Each file must have a containing directory named `*..xcassets/*..appiconset` and there may be only one such `..appiconset` directory in the list. In Xcode 26+ for iOS/macOS/watchOS, an `*.icon` bundle can be provided along with the `*..xcassets` bundle to support 26 and pre-26 Apple OS rendering.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
--| <a id="ios_extension-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
-+| <a id="ios_extension-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.<br><br>Multiple app_intents dependencies are supported on Xcode 26 and later. If multiple dependencies are provided, AppShortcutsProvider is recognized only when it is defined in the first dependency.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="ios_extension-bundle_id"></a>bundle_id |  The bundle ID (reverse-DNS path followed by app name) for this target. Only use this attribute if the bundle ID is not intended to be composed through an assigned base bundle ID rule found within `signed_capabilities`.   | String | optional |  `""`  |
- | <a id="ios_extension-bundle_id_suffix"></a>bundle_id_suffix |  A string to act as the suffix of the composed bundle ID. If this target's bundle ID is composed from a base bundle ID rule found within `signed_capabilities`, then this string will be appended to the end of the bundle ID following a "." separator.   | String | optional |  `"bundle_name"`  |
- | <a id="ios_extension-bundle_name"></a>bundle_name |  The desired name of the bundle (without the extension). If this attribute is not set, then the name of the target will be used instead.   | String | optional |  `""`  |
-diff --git a/doc/rules-macos.md b/doc/rules-macos.md
-index 7bf1a696..fb0df74d 100644
---- a/doc/rules-macos.md
-+++ b/doc/rules-macos.md
-@@ -35,7 +35,7 @@ simple command line tool as a standalone binary, use
- | <a id="macos_application-additional_contents"></a>additional_contents |  Files that should be copied into specific subdirectories of the Contents folder in the bundle. The keys of this dictionary are labels pointing to single files, filegroups, or targets; the corresponding value is the name of the subdirectory of Contents where they should be placed.<br><br>The relative directory structure of filegroup contents is preserved when they are copied into the desired Contents subdirectory.   | <a href="https://bazel.build/rules/lib/dict">Dictionary: Label -> String</a> | optional |  `{}`  |
- | <a id="macos_application-additional_linker_inputs"></a>additional_linker_inputs |  A list of input files to be passed to the linker.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="macos_application-app_icons"></a>app_icons |  Files that comprise the app icons for the application. Each file must have a containing directory named `*..xcassets/*..appiconset` and there may be only one such `..appiconset` directory in the list. In Xcode 26+ for iOS/macOS/watchOS, an `*.icon` bundle can be provided along with the `*..xcassets` bundle to support 26 and pre-26 Apple OS rendering.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
--| <a id="macos_application-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
-+| <a id="macos_application-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.<br><br>Multiple app_intents dependencies are supported on Xcode 26 and later. If multiple dependencies are provided, AppShortcutsProvider is recognized only when it is defined in the first dependency.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="macos_application-bundle_id"></a>bundle_id |  The bundle ID (reverse-DNS path followed by app name) for this target. Only use this attribute if the bundle ID is not intended to be composed through an assigned base bundle ID rule found within `signed_capabilities`.   | String | optional |  `""`  |
- | <a id="macos_application-bundle_id_suffix"></a>bundle_id_suffix |  A string to act as the suffix of the composed bundle ID. If this target's bundle ID is composed from a base bundle ID rule found within `signed_capabilities`, then this string will be appended to the end of the bundle ID following a "." separator.   | String | optional |  `"_"`  |
- | <a id="macos_application-bundle_name"></a>bundle_name |  The desired name of the bundle (without the extension). If this attribute is not set, then the name of the target will be used instead.   | String | optional |  `""`  |
-diff --git a/doc/rules-tvos.md b/doc/rules-tvos.md
-index 833a2642..1045d2df 100644
---- a/doc/rules-tvos.md
-+++ b/doc/rules-tvos.md
-@@ -30,7 +30,7 @@ Builds and bundles a tvOS Application.
- | <a id="tvos_application-resources"></a>resources |  A list of resources or files bundled with the bundle. The resources will be stored in the appropriate resources location within the bundle.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="tvos_application-additional_linker_inputs"></a>additional_linker_inputs |  A list of input files to be passed to the linker.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="tvos_application-app_icons"></a>app_icons |  Files that comprise the app icons for the application. Each file must have a containing directory named `*..xcassets/*..appiconset` and there may be only one such `..appiconset` directory in the list. In Xcode 26+ for iOS/macOS/watchOS, an `*.icon` bundle can be provided along with the `*..xcassets` bundle to support 26 and pre-26 Apple OS rendering.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
--| <a id="tvos_application-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
-+| <a id="tvos_application-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.<br><br>Multiple app_intents dependencies are supported on Xcode 26 and later. If multiple dependencies are provided, AppShortcutsProvider is recognized only when it is defined in the first dependency.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="tvos_application-bundle_id"></a>bundle_id |  The bundle ID (reverse-DNS path followed by app name) for this target. Only use this attribute if the bundle ID is not intended to be composed through an assigned base bundle ID rule found within `signed_capabilities`.   | String | optional |  `""`  |
- | <a id="tvos_application-bundle_id_suffix"></a>bundle_id_suffix |  A string to act as the suffix of the composed bundle ID. If this target's bundle ID is composed from a base bundle ID rule found within `signed_capabilities`, then this string will be appended to the end of the bundle ID following a "." separator.   | String | optional |  `"_"`  |
- | <a id="tvos_application-bundle_name"></a>bundle_name |  The desired name of the bundle (without the extension). If this attribute is not set, then the name of the target will be used instead.   | String | optional |  `""`  |
-diff --git a/doc/rules-visionos.md b/doc/rules-visionos.md
-index 7b465c35..1dbafc17 100755
---- a/doc/rules-visionos.md
-+++ b/doc/rules-visionos.md
-@@ -30,7 +30,7 @@ Builds and bundles a visionOS Application.
- | <a id="visionos_application-resources"></a>resources |  A list of resources or files bundled with the bundle. The resources will be stored in the appropriate resources location within the bundle.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="visionos_application-additional_linker_inputs"></a>additional_linker_inputs |  A list of input files to be passed to the linker.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="visionos_application-app_icons"></a>app_icons |  Files that comprise the app icons for the application. Each file must have a containing directory named `*..xcassets/*..solidimagestack` and there may be only one such `..solidimagestack` directory in the list. In Xcode 26+ for iOS/macOS/watchOS, an `*.icon` bundle can be provided along with the `*..xcassets` bundle to support 26 and pre-26 Apple OS rendering.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
--| <a id="visionos_application-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
-+| <a id="visionos_application-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.<br><br>Multiple app_intents dependencies are supported on Xcode 26 and later. If multiple dependencies are provided, AppShortcutsProvider is recognized only when it is defined in the first dependency.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="visionos_application-bundle_id"></a>bundle_id |  The bundle ID (reverse-DNS path followed by app name) for this target. Only use this attribute if the bundle ID is not intended to be composed through an assigned base bundle ID rule found within `signed_capabilities`.   | String | optional |  `""`  |
- | <a id="visionos_application-bundle_id_suffix"></a>bundle_id_suffix |  A string to act as the suffix of the composed bundle ID. If this target's bundle ID is composed from a base bundle ID rule found within `signed_capabilities`, then this string will be appended to the end of the bundle ID following a "." separator.   | String | optional |  `"bundle_name"`  |
- | <a id="visionos_application-bundle_name"></a>bundle_name |  The desired name of the bundle (without the extension). If this attribute is not set, then the name of the target will be used instead.   | String | optional |  `""`  |
-diff --git a/doc/rules-watchos.md b/doc/rules-watchos.md
-index af58bd1d..7dd5b24a 100644
---- a/doc/rules-watchos.md
-+++ b/doc/rules-watchos.md
-@@ -30,7 +30,7 @@ Builds and bundles a watchOS Application.
- | <a id="watchos_application-resources"></a>resources |  A list of resources or files bundled with the bundle. The resources will be stored in the appropriate resources location within the bundle.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="watchos_application-additional_linker_inputs"></a>additional_linker_inputs |  A list of input files to be passed to the linker.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="watchos_application-app_icons"></a>app_icons |  Files that comprise the app icons for the application. Each file must have a containing directory named `*..xcassets/*..appiconset` and there may be only one such `..appiconset` directory in the list. In Xcode 26+ for iOS/macOS/watchOS, an `*.icon` bundle can be provided along with the `*..xcassets` bundle to support 26 and pre-26 Apple OS rendering.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
--| <a id="watchos_application-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
-+| <a id="watchos_application-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.<br><br>Multiple app_intents dependencies are supported on Xcode 26 and later. If multiple dependencies are provided, AppShortcutsProvider is recognized only when it is defined in the first dependency.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="watchos_application-bundle_id"></a>bundle_id |  The bundle ID (reverse-DNS path followed by app name) for this target. Only use this attribute if the bundle ID is not intended to be composed through an assigned base bundle ID rule found within `signed_capabilities`.   | String | optional |  `""`  |
- | <a id="watchos_application-bundle_id_suffix"></a>bundle_id_suffix |  A string to act as the suffix of the composed bundle ID. If this target's bundle ID is composed from a base bundle ID rule found within `signed_capabilities`, then this string will be appended to the end of the bundle ID following a "." separator.   | String | optional |  `"watchkitapp"`  |
- | <a id="watchos_application-bundle_name"></a>bundle_name |  The desired name of the bundle (without the extension). If this attribute is not set, then the name of the target will be used instead.   | String | optional |  `""`  |
-@@ -173,7 +173,7 @@ Builds and bundles a watchOS Extension.
- | <a id="watchos_extension-deps"></a>deps |  A list of dependent targets that will be linked into this target's binary(s). Any resources, such as asset catalogs, that are referenced by those targets will also be transitively included in the final bundle(s).   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="watchos_extension-resources"></a>resources |  A list of resources or files bundled with the bundle. The resources will be stored in the appropriate resources location within the bundle.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="watchos_extension-additional_linker_inputs"></a>additional_linker_inputs |  A list of input files to be passed to the linker.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
--| <a id="watchos_extension-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
-+| <a id="watchos_extension-app_intents"></a>app_intents |  List of dependencies implementing the AppIntents protocol.<br><br>Multiple app_intents dependencies are supported on Xcode 26 and later. If multiple dependencies are provided, AppShortcutsProvider is recognized only when it is defined in the first dependency.   | <a href="https://bazel.build/concepts/labels">List of labels</a> | optional |  `[]`  |
- | <a id="watchos_extension-application_extension"></a>application_extension |  If `True`, this extension is an App Extension instead of a WatchKit Extension. It links the extension with the application extension point (`_NSExtensionMain`) instead of the WatchKit extension point (`_WKExtensionMain`), and has the `app_extension` `product_type` instead of `watch2_extension`.   | Boolean | optional |  `False`  |
- | <a id="watchos_extension-bundle_id"></a>bundle_id |  The bundle ID (reverse-DNS path followed by app name) for this target. Only use this attribute if the bundle ID is not intended to be composed through an assigned base bundle ID rule found within `signed_capabilities`.   | String | optional |  `""`  |
- | <a id="watchos_extension-bundle_id_suffix"></a>bundle_id_suffix |  A string to act as the suffix of the composed bundle ID. If this target's bundle ID is composed from a base bundle ID rule found within `signed_capabilities`, then this string will be appended to the end of the bundle ID following a "." separator.   | String | optional |  `"watchkitapp.watchkitextension"`  |
-diff --git a/test/starlark_tests/ios_application_tests.bzl b/test/starlark_tests/ios_application_tests.bzl
-index 8410f142..80c07830 100644
---- a/test/starlark_tests/ios_application_tests.bzl
-+++ b/test/starlark_tests/ios_application_tests.bzl
-@@ -866,6 +866,8 @@ def ios_application_test_suite(name):
-         text_test_values = [
-             ".*HelloWorldIntent.*",
-             ".*FavoriteSoup.*",
-+            ".*\"autoShortcuts\".*",
-+            ".*\"actionIdentifier\":\"HelloWorldIntent\".*",
-         ],
-         tags = [name],
-     )
-@@ -877,6 +879,8 @@ def ios_application_test_suite(name):
-         text_test_values = [
-             ".*HelloWorldIntent.*",
-             ".*FavoriteSoup.*",
-+            ".*\"autoShortcuts\".*",
-+            ".*\"actionIdentifier\":\"HelloWorldIntent\".*",
-         ],
-         tags = [name],
-     )
-@@ -906,6 +910,8 @@ def ios_application_test_suite(name):
-             ".*HelloWorldIntent.*",
-             ".*IntelIntent.*",
-             ".*iOSIntent.*",
-+            ".*\"autoShortcuts\".*",
-+            ".*\"actionIdentifier\":\"HelloWorldIntent\".*",
-         ],
-         text_file_not_contains = [
-             ".*ArmIntent.*",
-@@ -924,6 +930,8 @@ def ios_application_test_suite(name):
-             ".*HelloWorldIntent.*",
-             ".*ArmIntent.*",
-             ".*iOSIntent.*",
-+            ".*\"autoShortcuts\".*",
-+            ".*\"actionIdentifier\":\"HelloWorldIntent\".*",
-         ],
-         text_file_not_contains = [
-             ".*IntelIntent.*",
-diff --git a/test/starlark_tests/macos_application_tests.bzl b/test/starlark_tests/macos_application_tests.bzl
-index c15e264b..16dfe8e2 100644
---- a/test/starlark_tests/macos_application_tests.bzl
-+++ b/test/starlark_tests/macos_application_tests.bzl
-@@ -448,6 +448,8 @@ def macos_application_test_suite(name):
-         text_test_values = [
-             ".*HelloWorldIntent.*",
-             ".*FavoriteSoup.*",
-+            ".*\"autoShortcuts\".*",
-+            ".*\"actionIdentifier\":\"HelloWorldIntent\".*",
-         ],
-         tags = [name],
-     )
-@@ -459,6 +461,8 @@ def macos_application_test_suite(name):
-         text_test_values = [
-             ".*HelloWorldIntent.*",
-             ".*FavoriteSoup.*",
-+            ".*\"autoShortcuts\".*",
-+            ".*\"actionIdentifier\":\"HelloWorldIntent\".*",
-         ],
-         tags = [name],
-     )
-diff --git a/test/starlark_tests/resources/app_intent.swift b/test/starlark_tests/resources/app_intent.swift
-index ec097af2..e21e5d0e 100644
---- a/test/starlark_tests/resources/app_intent.swift
-+++ b/test/starlark_tests/resources/app_intent.swift
-@@ -96,3 +96,16 @@ struct HelloWorldIntent: AppIntent {
-     }
-   }
- #endif
++    root_module_names = [
++        intent_module_name
++        for dep in deps[first_cc_toolchain_key]
++        for intent_module_name in dep[AppIntentsInfo].intent_module_names
++    ]
 +
-+struct AppShortcuts: AppShortcutsProvider {
-+    static var appShortcuts: [AppShortcut] {
-+        AppShortcut(
-+            intent: HelloWorldIntent(),
-+            phrases: [
-+                "Run hello world in \(.applicationName)",
-+            ],
-+            shortTitle: "Run First Intent",
-+            systemImageName: "1.circle"
-+        )
-+    }
++    # The appintentsmetadataprocessor supports merging App Intents metadata from dependency
++    # modules via `--static-metadata-file-list` starting with the Xcode 26 toolchain. On earlier
++    # Xcode versions, only the App Intents from the modules directly passed to `app_intents` are
++    # processed, keeping the previous behavior.
++    dependency_metadata_bundles = []
++    xcode_version_config = platform_prerequisites.xcode_version_config
++    if xcode_version_config.xcode_version() >= apple_common.dotted_version("26.0"):
++        dependency_metadata_bundles = _generate_dependency_metadata_bundles(
+             actions = actions,
+-            apple_fragment = platform_prerequisites.apple_fragment,
+-            constvalues_files = [
+-                swiftconstvalues_file
+-                for dep in deps[first_cc_toolchain_key]
+-                for swiftconstvalues_file in dep[AppIntentsInfo].swiftconstvalues_files
+-            ],
+-            intents_module_names = [
+-                intent_module_name
+-                for dep in deps[first_cc_toolchain_key]
+-                for intent_module_name in dep[AppIntentsInfo].intent_module_names
+-            ],
++            deps = deps[first_cc_toolchain_key],
+             label = label,
+-            dependency_metadata_bundles = [],
+             platform_prerequisites = platform_prerequisites,
+-            source_files = [
+-                swift_source_file
+-                for dep in deps[first_cc_toolchain_key]
+-                for swift_source_file in dep[AppIntentsInfo].swift_source_files
+-            ],
+-            target_triples = [
+-                cc_toolchain[cc_common.CcToolchainInfo].target_gnu_system_name
+-                for cc_toolchain in cc_toolchains.values()
+-            ],
+-            xcode_version_config = platform_prerequisites.xcode_version_config,
++            root_module_names = root_module_names,
++            target_triples = target_triples,
+             json_tool = json_tool,
+         )
+ 
++    metadata_bundle = generate_app_intents_metadata_bundle(
++        actions = actions,
++        apple_fragment = platform_prerequisites.apple_fragment,
++        constvalues_files = [
++            swiftconstvalues_file
++            for dep in deps[first_cc_toolchain_key]
++            for swiftconstvalues_file in dep[AppIntentsInfo].swiftconstvalues_files
++        ],
++        dependency_metadata_bundles = dependency_metadata_bundles,
++        intents_module_names = root_module_names,
++        label = label,
++        platform_prerequisites = platform_prerequisites,
++        source_files = [
++            swift_source_file
++            for dep in deps[first_cc_toolchain_key]
++            for swift_source_file in dep[AppIntentsInfo].swift_source_files
++        ],
++        target_triples = target_triples,
++        xcode_version_config = platform_prerequisites.xcode_version_config,
++        json_tool = json_tool,
++    )
++
+     bundle_location = processor.location.bundle
+     if str(platform_prerequisites.platform_type) == "macos":
+         bundle_location = processor.location.resource
+diff --git a/apple/internal/providers/app_intents_info.bzl b/apple/internal/providers/app_intents_info.bzl
+index b72f0a8..bbf3d70 100644
+--- a/apple/internal/providers/app_intents_info.bzl
++++ b/apple/internal/providers/app_intents_info.bzl
+@@ -23,5 +23,19 @@ A List with the module names where App Intents are expected to be found.""",
+ A List with the swift source Files to handle via app intents processing.""",
+         "swiftconstvalues_files": """
+ A List with the swiftconstvalues Files to handle via app intents processing for Xcode 15+.""",
++        "transitive_dependency_metadata": """
++A postorder depset of structs, one for each swift_library module in the transitive closure of
++`deps` (including the target itself) which directly links the AppIntents framework. Each struct
++carries the inputs required to generate an App Intents metadata bundle for that module, with the
++following fields:
++
++*   `module_name`: String with the Swift module name.
++*   `swift_source_files`: Tuple of swift source Files for the module.
++*   `swiftconstvalues_files`: Tuple of swiftconstvalues Files for the module (Xcode 15+).
++*   `dependency_module_names`: Tuple of Strings with the module names of the module's transitive
++    dependencies which also directly link the AppIntents framework.
++
++Requires the Xcode 26+ appintentsmetadataprocessor `--static-metadata-file-list` interface to be
++processed; ignored on earlier Xcode versions.""",
+     },
+ )
+diff --git a/apple/internal/resource_actions/app_intents.bzl b/apple/internal/resource_actions/app_intents.bzl
+index 7336f93..87c340c 100644
+--- a/apple/internal/resource_actions/app_intents.bzl
++++ b/apple/internal/resource_actions/app_intents.bzl
+@@ -16,6 +16,7 @@
+ 
+ load("@build_bazel_apple_support//lib:apple_support.bzl", "apple_support")
+ load("//apple/internal:intermediates.bzl", "intermediates")
++load("//apple/internal:shared_environment.bzl", "shared_environment")
+ 
+ # Maps the strings passed in to the "families" attribute to the string represention used as an input
+ # for the App Intents Metadata Processor tool.
+@@ -32,9 +33,10 @@ def generate_app_intents_metadata_bundle(
+         actions,
+         apple_fragment,
+         constvalues_files,
++        dependency_metadata_bundles = [],
+         intents_module_names,
++        is_dependency_module = False,
+         label,
+-        dependency_metadata_bundles,
+         platform_prerequisites,
+         source_files,
+         target_triples,
+@@ -47,11 +49,17 @@ def generate_app_intents_metadata_bundle(
+         apple_fragment: An Apple fragment (ctx.fragments.apple).
+         constvalues_files: List of swiftconstvalues files generated from Swift source files
+             implementing the AppIntents protocol.
++        dependency_metadata_bundles: List of Metadata.appintents bundles from dependency modules
++            to merge into this metadata bundle via `--static-metadata-file-list`. Only supported
++            by the Xcode 26+ toolchain.
+         intents_module_names: List of Strings with the module names corresponding to the modules
+             found which have intents compiled.
++        is_dependency_module: Boolean. Whether the metadata bundle is generated for a statically
++            linked dependency module rather than for the module owning the final metadata bundle.
++            Mirroring the behavior xcodebuild applies to statically linked dependency modules, the
++            module is allowed to produce no metadata output at all (e.g. when it does not define
++            any App Intents).
+         label: Label for the current target (`ctx.label`).
+-        dependency_metadata_bundles: List of Metadata.appintents bundles of dependency modules,
+-            only works on Xcode 26+ toolchain.
+         platform_prerequisites: Struct containing information on the platform being targeted.
+         source_files: List of Swift source files implementing the AppIntents protocol.
+         target_triples: List of Apple target triples from `CcToolchainInfo` providers.
+@@ -151,6 +159,7 @@ an issue with the Apple BUILD rules with repro steps.
+         actions = actions,
+         apple_fragment = apple_fragment,
+         arguments = [args],
++        env = shared_environment.default_env,
+         command = '''\
+ set -euo pipefail
+ 
+@@ -172,18 +181,21 @@ output=$($@ --sdk-root "$SDKROOT" --toolchain-dir "$DEVELOPER_DIR/Toolchains/Xco
+ # files with non-deterministic keys order.
+ # Here we sort their keys to ensure that the output is deterministic.
+ # This should be removed once the issue is fixed (FB19585633).
++# A module which defines no App Intents produces no output files at all; the missing files are
++# skipped here and handled by the "skipping writing output" check below.
+ actionsdata_file="{output_dir}/extract.actionsdata"
+ version_file="{output_dir}/version.json"
+ 
+-# Sort both JSON files to ensure deterministic output
+-sort_json_file "$version_file"
+-sort_json_file "$actionsdata_file"
++for json_file in "$version_file" "$actionsdata_file"; do
++  if [[ -f "$json_file" ]]; then
++    # Sort the JSON file to ensure deterministic output
++    sort_json_file "$json_file"
+ 
+-# Set write permission to allow rewriting files
+-chmod +w "$version_file" "$actionsdata_file"
+-
+-# Restore read-only permission
+-chmod -w "$version_file" "$actionsdata_file"
++    # Set write permission to allow rewriting the file, then restore read-only permission
++    chmod +w "$json_file"
++    chmod -w "$json_file"
++  fi
++done
+ 
+ if [[ "$exit_status" -ne 0 ]]; then
+   echo "$output" >&2
+@@ -191,11 +203,12 @@ if [[ "$exit_status" -ne 0 ]]; then
+ elif [[ "$output" == *error:* ]]; then
+   echo "$output" >&2
+   exit 1
+-elif [[ "$output" == *"skipping writing output"* ]]; then
++elif [[ "{allow_skipped_output}" != "1" && "$output" == *"skipping writing output"* ]]; then
+   echo "$output" >&2
+   exit 1
+ fi
+ '''.format(
++            allow_skipped_output = "1" if is_dependency_module else "0",
+             output_dir = output.path,
+             json_tool_path = json_tool_path,
+         ),
+diff --git a/apple/internal/shared_environment.bzl b/apple/internal/shared_environment.bzl
+new file mode 100644
+index 0000000..7d6f235
+--- /dev/null
++++ b/apple/internal/shared_environment.bzl
+@@ -0,0 +1,30 @@
++# Copyright 2025 The Bazel Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#    http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++"""
++Environment related functions and providers.
++"""
++
++visibility([
++    "//apple/...",
++    "//test/...",
++])
++
++_DEFAULT_ENV = {
++    "SWIFT_DETERMINISTIC_HASHING": "1",
 +}
-\ No newline at end of file
-diff --git a/test/starlark_tests/tvos_application_tests.bzl b/test/starlark_tests/tvos_application_tests.bzl
-index 5fe99932..b62820e9 100644
---- a/test/starlark_tests/tvos_application_tests.bzl
-+++ b/test/starlark_tests/tvos_application_tests.bzl
-@@ -671,6 +671,8 @@ def tvos_application_test_suite(name):
-         text_test_values = [
-             ".*HelloWorldIntent.*",
-             ".*ExtraIntent.*",
-+            ".*\"autoShortcuts\".*",
-+            ".*\"actionIdentifier\":\"HelloWorldIntent\".*",
-         ],
-         tags = [name],
-     )
-@@ -682,6 +684,8 @@ def tvos_application_test_suite(name):
-         text_test_values = [
-             ".*HelloWorldIntent.*",
-             ".*ExtraIntent.*",
-+            ".*\"autoShortcuts\".*",
-+            ".*\"actionIdentifier\":\"HelloWorldIntent\".*",
-         ],
-         tags = [name],
-     )
-diff --git a/test/starlark_tests/watchos_application_tests.bzl b/test/starlark_tests/watchos_application_tests.bzl
-index e88e57d6..a0c970f8 100644
---- a/test/starlark_tests/watchos_application_tests.bzl
-+++ b/test/starlark_tests/watchos_application_tests.bzl
-@@ -334,6 +334,8 @@ def watchos_application_test_suite(name):
-         text_test_values = [
-             ".*HelloWorldIntent.*",
-             ".*FavoriteSoup.*",
-+            ".*\"autoShortcuts\".*",
-+            ".*\"actionIdentifier\":\"HelloWorldIntent\".*",
-         ],
-         tags = [name],
-     )
-@@ -345,6 +347,8 @@ def watchos_application_test_suite(name):
-         text_test_values = [
-             ".*HelloWorldIntent.*",
-             ".*FavoriteSoup.*",
-+            ".*\"autoShortcuts\".*",
-+            ".*\"actionIdentifier\":\"HelloWorldIntent\".*",
-         ],
-         tags = [name],
-     )
++
++shared_environment = struct(
++    default_env = _DEFAULT_ENV,
++)

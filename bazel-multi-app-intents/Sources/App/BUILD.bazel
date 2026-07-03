@@ -12,21 +12,19 @@ swift_library(
 
 ios_application(
     name = "App",
+    app_intents = [
+        "//Sources/AppShortcuts:AppShortcuts",
+    ],
     bundle_id = "kntk.bazelmultiappintents",
     families = [
         "iphone",
         "ipad",
     ],
     infoplists = ["Info.plist"],
-    app_intents = [
-        "//Sources/AppShortcuts:AppShortcuts",
-        "//Sources/FirstAppIntent:FirstAppIntent",
-        "//Sources/SecondAppIntent:SecondAppIntent",
-    ],
-    minimum_os_version = "17.0",
+    minimum_os_version = "18.0",
+    visibility = ["//visibility:public"],
     deps = [
         ":AppLib",
         "//Sources/AppShortcuts:AppShortcuts",
     ],
-    visibility = ["//visibility:public"],
 )

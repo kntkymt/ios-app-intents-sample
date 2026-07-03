@@ -5,10 +5,11 @@ swift_library(
     srcs = [
         "AppShortcuts.swift",
     ],
+    linkopts = ["-Wl,-framework,AppIntents"],
+    module_name = "AppShortcuts",
+    visibility = ["//visibility:public"],
     deps = [
         "//Sources/FirstAppIntent:FirstAppIntent",
-        "//Sources/SecondAppIntent:SecondAppIntent",
+        "//Sources/Intermediate:Intermediate",
     ],
-    linkopts = ["-Wl,-framework,AppIntents"],
-    visibility = ["//visibility:public"],
 )

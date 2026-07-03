@@ -6,5 +6,6 @@ swift_library(
         "FirstAppIntent.swift",
     ],
     linkopts = ["-Wl,-framework,AppIntents"],
+    module_name = "FirstAppIntent",
     visibility = ["//visibility:public"],
 )
