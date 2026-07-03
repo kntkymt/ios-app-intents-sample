@@ -1,11 +1,11 @@
 import Foundation
 import Observation
 
-/// Shared navigation state that bridges ``OpenAppIntent`` to ``RootView``.
+/// Shared navigation state that bridges the app's `OpenIntent`s to ``RootView``.
 ///
-/// The intent runs outside of any view, so it records which ``AppScreen`` to
-/// show here. ``RootView`` observes ``selectedScreen`` and selects the matching
-/// tab in its `TabView`.
+/// The intents run outside of any view, so they record which ``AppScreen`` to
+/// show (and, for notifications, which detail to push) here. ``RootView`` and
+/// ``NotificationScreen`` observe this state and drive their navigation.
 @MainActor
 @Observable
 final class AppNavigation {
@@ -15,4 +15,8 @@ final class AppNavigation {
 
     /// The screen the app should currently display.
     var selectedScreen: AppScreen = .todo
+
+    /// The navigation stack for the Notifications tab. Appending a
+    /// ``Notification`` pushes its ``NotificationDetailScreen``.
+    var notificationPath: [Notification] = []
 }

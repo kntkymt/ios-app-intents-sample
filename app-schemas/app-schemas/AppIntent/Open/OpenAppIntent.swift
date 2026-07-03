@@ -7,15 +7,15 @@ import AppIntents
 /// app itself. The ``AppScreenEntity`` (backed by the ``AppScreen`` `AppEnum`)
 /// describes which screen to show. Siri, Spotlight, and Apple Intelligence use
 /// this schema to launch the app.
-@AppIntent(schema: .system.open)
-struct OpenAppIntent: OpenIntent {
-    @Parameter(title: "Screen")
-    var target: AppScreenEntity
-
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        // `OpenIntent` opens the app; select the requested tab in `RootView`.
-        AppNavigation.shared.selectedScreen = target.screen
-        return .result()
-    }
-}
+//@AppIntent(schema: .system.open)
+//struct OpenAppIntent: OpenIntent {
+//    @Parameter(title: "Screen")
+//    var target: AppScreenEntity
+//
+//    @MainActor
+//    func perform() async throws -> some IntentResult {
+//        // `OpenIntent` opens the app; select the requested tab in `RootView`.
+//        AppNavigation.shared.selectedScreen = target.screen
+//        return .result()
+//    }
+//}

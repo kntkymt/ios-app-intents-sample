@@ -1,17 +1,31 @@
+import AppIntents
 import SwiftUI
 
 /// Displays a read-only list of system messages.
 struct NotificationScreen: View {
     private let repository = NotificationRepository()
 
+    @State private var navigation = AppNavigation.shared
     @State private var notifications: [Notification] = []
 
     var body: some View {
-        NavigationStack {
+        // The path is driven by `AppNavigation` so `OpenNotificationIntent` can
+        // push a `NotificationDetailScreen` from outside the view hierarchy.
+        NavigationStack(path: $navigation.notificationPath) {
             List(notifications) { notification in
-                NotificationRow(notification: notification)
+                NavigationLink(value: notification) {
+                    NotificationRow(notification: notification)
+                }
+                // On-screen awareness: tie each visible row to its app entity so
+                // Siri and Apple Intelligence know which notifications are onscreen.
+                .appEntityIdentifier(
+                    EntityIdentifier(for: NotificationEntity.self, identifier: notification.id)
+                )
             }
             .navigationTitle("Notifications")
+            .navigationDestination(for: Notification.self) { notification in
+                NotificationDetailScreen(notification: notification)
+            }
         }
         .task { await load() }
     }

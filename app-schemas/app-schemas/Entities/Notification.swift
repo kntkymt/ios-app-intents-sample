@@ -4,7 +4,7 @@ import Foundation
 ///
 /// For now its shape mirrors ``ToDo``; the fields can diverge later as the
 /// notification feature grows.
-struct Notification: Codable, Identifiable, Equatable {
+struct Notification: Codable, Identifiable, Equatable, Hashable {
     let id: Int
     var title: String
     var description: String

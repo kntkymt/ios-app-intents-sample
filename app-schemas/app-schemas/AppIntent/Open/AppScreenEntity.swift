@@ -46,14 +46,17 @@ struct AppScreenEntity: AppEntity {
         self.screen = screen
     }
 
-    struct AppScreenQuery: EntityQuery {
+    /// Because the set of screens is small and fixed, the query is an
+    /// `EnumerableEntityQuery`: it can hand the system every screen at once,
+    /// which also lets the Shortcuts app generate a Find action automatically.
+    struct AppScreenQuery: EnumerableEntityQuery {
         func entities(for identifiers: [AppScreenEntity.ID]) async throws -> [AppScreenEntity] {
             identifiers
                 .compactMap(AppScreen.init(rawValue:))
                 .map(AppScreenEntity.init(screen:))
         }
 
-        func suggestedEntities() async throws -> [AppScreenEntity] {
+        func allEntities() async throws -> [AppScreenEntity] {
             AppScreen.allCases.map(AppScreenEntity.init(screen:))
         }
     }

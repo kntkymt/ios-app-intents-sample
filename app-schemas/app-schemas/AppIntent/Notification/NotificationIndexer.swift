@@ -14,6 +14,7 @@ enum NotificationIndexer {
     ///
     /// Notifications have stable identifiers, so re-indexing updates the existing
     /// entries in place — no need to delete first.
+    @concurrent
     static func reindex(_ notifications: [Notification]) async {
         let messageEntities = notifications.map(NotificationEntity.init)
         do {
