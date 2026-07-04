@@ -15,6 +15,9 @@ struct RootView: View {
                 NotificationScreen()
             }
         }
+        .sheet(item: $navigation.presentedCaptureMode) { captureMode in
+            CameraScreen(captureMode: captureMode)
+        }
     }
 }
 

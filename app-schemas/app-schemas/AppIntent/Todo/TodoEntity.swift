@@ -31,7 +31,7 @@ struct TodoEntity: IndexedEntity {
     var images: [IntentFile] { [] }
     var subtasks: [TodoEntity] { [] }
     var tags: Set<String> { [] }
-    var urls: [URL] { [] }
+    var urls: [URL] { [URL(string: "https://example.com")!] }
     var dueDate: DateComponents? { nil }
     var recurrence: Calendar.RecurrenceRule? { nil }
     var isFlagged: Bool? { nil }

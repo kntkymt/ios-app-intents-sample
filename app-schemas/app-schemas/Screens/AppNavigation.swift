@@ -19,4 +19,9 @@ final class AppNavigation {
     /// The navigation stack for the Notifications tab. Appending a
     /// ``Notification`` pushes its ``NotificationDetailScreen``.
     var notificationPath: [Notification] = []
+
+    /// The capture mode whose camera screen should be presented as a modal
+    /// sheet, or `nil` when no camera is showing. Set by
+    /// ``NavigateToCaptureModeIntent`` to open ``CameraScreen``.
+    var presentedCaptureMode: CaptureMode?
 }

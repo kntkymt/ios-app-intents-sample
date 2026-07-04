@@ -16,6 +16,15 @@ struct TodoScreen: View {
             }
             .navigationTitle("ToDo")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        // Opens the same dummy ``CameraScreen`` that
+                        // ``NavigateToCaptureModeIntent`` presents.
+                        AppNavigation.shared.presentedCaptureMode = .photo
+                    } label: {
+                        Image(systemName: "camera")
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: add) {
                         Image(systemName: "plus")
@@ -28,6 +37,7 @@ struct TodoScreen: View {
 
     private func load() async {
         todos = await repository.getTodos()
+        print(todos.map(\.id))
         // Index the current to-dos when the screen first appears.
         await TodoIndexer.reindex(todos)
     }
