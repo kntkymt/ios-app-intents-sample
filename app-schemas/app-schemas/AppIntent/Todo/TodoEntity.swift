@@ -1,4 +1,5 @@
 import AppIntents
+import CoreSpotlight
 import Foundation
 
 /// An app entity that exposes a ``ToDo`` to Siri, Apple Intelligence, and
@@ -49,8 +50,13 @@ struct TodoEntity: IndexedEntity {
         )
     }
 
-    struct TodoEntityQuery: EntityQuery {
+    struct TodoEntityQuery: IndexedEntityQuery {
+        /// Records query-method calls to UserDefaults, mirroring how to-dos are
+        /// stored, so the timing of each call can be inspected later.
+        private let logRepository = ReindexLogRepository()
+
         func entities(for identifiers: [TodoEntity.ID]) async throws -> [TodoEntity] {
+            await logRepository.append(ReindexLog(kind: .entities, count: identifiers.count))
             let identifierSet = Set(identifiers)
             let todos = await ToDoRepository().getTodos()
             return todos
@@ -59,7 +65,25 @@ struct TodoEntity: IndexedEntity {
         }
 
         func suggestedEntities() async throws -> [TodoEntity] {
-            await ToDoRepository().getTodos().map(TodoEntity.init)
+            let entities = await ToDoRepository().getTodos().map(TodoEntity.init)
+            await logRepository.append(ReindexLog(kind: .suggested, count: entities.count))
+            return entities
+        }
+
+        func reindexEntities(
+            for identifiers: [TodoEntity.ID],
+            indexDescription: CSSearchableIndexDescription
+        ) async throws {
+            await logRepository.append(ReindexLog(kind: .reindex, count: identifiers.count))
+            try await TodoIndexer.reindex(identifiers: identifiers)
+        }
+
+        func reindexAllEntities(
+            indexDescription: CSSearchableIndexDescription
+        ) async throws {
+            let todos = await ToDoRepository().getTodos()
+            await logRepository.append(ReindexLog(kind: .reindexAll, count: todos.count))
+            await TodoIndexer.reindex(todos)
         }
     }
 }

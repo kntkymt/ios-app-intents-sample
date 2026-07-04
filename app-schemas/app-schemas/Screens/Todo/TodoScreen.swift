@@ -5,6 +5,7 @@ struct TodoScreen: View {
     private let repository = ToDoRepository()
 
     @State private var todos: [ToDo] = []
+    @State private var isShowingReindexLog = false
 
     var body: some View {
         NavigationStack {
@@ -25,11 +26,21 @@ struct TodoScreen: View {
                         Image(systemName: "camera")
                     }
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        isShowingReindexLog = true
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: add) {
                         Image(systemName: "plus")
                     }
                 }
+            }
+            .sheet(isPresented: $isShowingReindexLog) {
+                ReindexLogScreen()
             }
         }
         .task { await load() }
