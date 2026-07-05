@@ -1,6 +1,7 @@
 import AppIntents
 import FirstAppIntent
 import Intermediate
+import LibraryKit
 
 struct ParentIntent: AppIntent {
     static let title: LocalizedStringResource = "Parent Intent"
@@ -15,6 +16,18 @@ struct ParentIntent: AppIntent {
     }
 }
 
+struct ParentShelfIntent: AppIntent {
+    static let title: LocalizedStringResource = "Parent Shelf Intent"
+    static let description = IntentDescription(
+        "An intent returning an AppEntity declared in a dynamic framework.")
+
+    init() {}
+
+    func perform() async throws -> some IntentResult & ReturnsValue<ShelfEntity> {
+        .result(value: ShelfEntity(id: "shelf"))
+    }
+}
+
 struct MultiAppShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
@@ -25,5 +38,14 @@ struct MultiAppShortcuts: AppShortcutsProvider {
             shortTitle: "Run Parent Intent",
             systemImageName: "1.circle"
         )
+    }
+}
+
+struct MultiAppIntentsPackage: AppIntentsPackage {
+    static var includedPackages: [any AppIntentsPackage.Type] {
+        [
+            FirstAppIntentPackage.self,
+            IntermediatePackage.self,
+        ]
     }
 }

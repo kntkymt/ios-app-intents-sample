@@ -122,3 +122,5 @@ public struct OpenBookIntent: OpenIntent {
         .result()
     }
 }
+
+public struct BookAppIntentPackage: AppIntentsPackage {}

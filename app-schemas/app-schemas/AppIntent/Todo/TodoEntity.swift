@@ -9,6 +9,10 @@ import Foundation
 /// value, mapping its fields onto the properties the schema requires.
 @AppEntity(schema: .reminders.reminder)
 struct TodoEntity: IndexedEntity {
+    static var isAssistantOnly: Bool {
+        true
+    }
+
     static let defaultQuery = TodoEntityQuery()
 
     /// The underlying model value this entity represents.
@@ -53,10 +57,10 @@ struct TodoEntity: IndexedEntity {
     struct TodoEntityQuery: IndexedEntityQuery {
         /// Records query-method calls to UserDefaults, mirroring how to-dos are
         /// stored, so the timing of each call can be inspected later.
-        private let logRepository = ReindexLogRepository()
+        private let logRepository = LogRepository()
 
         func entities(for identifiers: [TodoEntity.ID]) async throws -> [TodoEntity] {
-            await logRepository.append(ReindexLog(kind: .entities, count: identifiers.count))
+            await logRepository.append(Log(callerName: #function, count: identifiers.count))
             let identifierSet = Set(identifiers)
             let todos = await ToDoRepository().getTodos()
             return todos
@@ -66,7 +70,7 @@ struct TodoEntity: IndexedEntity {
 
         func suggestedEntities() async throws -> [TodoEntity] {
             let entities = await ToDoRepository().getTodos().map(TodoEntity.init)
-            await logRepository.append(ReindexLog(kind: .suggested, count: entities.count))
+            await logRepository.append(Log(callerName: #function, count: entities.count))
             return entities
         }
 
@@ -74,7 +78,7 @@ struct TodoEntity: IndexedEntity {
             for identifiers: [TodoEntity.ID],
             indexDescription: CSSearchableIndexDescription
         ) async throws {
-            await logRepository.append(ReindexLog(kind: .reindex, count: identifiers.count))
+            await logRepository.append(Log(callerName: #function, count: identifiers.count))
             try await TodoIndexer.reindex(identifiers: identifiers)
         }
 
@@ -82,7 +86,7 @@ struct TodoEntity: IndexedEntity {
             indexDescription: CSSearchableIndexDescription
         ) async throws {
             let todos = await ToDoRepository().getTodos()
-            await logRepository.append(ReindexLog(kind: .reindexAll, count: todos.count))
+            await logRepository.append(Log(callerName: #function, count: todos.count))
             await TodoIndexer.reindex(todos)
         }
     }

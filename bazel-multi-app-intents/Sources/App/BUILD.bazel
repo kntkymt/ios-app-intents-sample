@@ -16,6 +16,9 @@ ios_application(
         "//Sources/AppShortcuts:AppShortcuts",
     ],
     bundle_id = "kntk.bazelmultiappintents",
+    extensions = [
+        "//Sources/IntentsExtension:IntentsExtension",
+    ],
     families = [
         "iphone",
         "ipad",

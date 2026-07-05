@@ -1,3 +1,5 @@
+import AppIntents
+import BookAppIntent
 import Foundation
 import SecondAppIntent
 
@@ -6,5 +8,14 @@ import SecondAppIntent
 public struct IntermediateHelper {
     public init() {
         let _ = SecondAppIntent()
+    }
+}
+
+public struct IntermediatePackage: AppIntentsPackage {
+    public static var includedPackages: [any AppIntentsPackage.Type] {
+        [
+            SecondAppIntentPackage.self,
+            BookAppIntentPackage.self,
+        ]
     }
 }

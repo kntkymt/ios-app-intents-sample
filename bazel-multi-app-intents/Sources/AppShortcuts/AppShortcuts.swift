@@ -29,3 +29,12 @@ public struct MultiAppShortcuts: AppShortcutsProvider {
 
     public init() {}
 }
+
+public struct MultiAppIntentsPackage: AppIntentsPackage {
+    public static var includedPackages: [any AppIntentsPackage.Type] {
+        [
+            FirstAppIntentPackage.self,
+            IntermediatePackage.self,
+        ]
+    }
+}

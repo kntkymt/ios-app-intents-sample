@@ -33,3 +33,5 @@ public struct CounterEntityQuery: EntityQuery {
         identifiers.map { CounterEntity(id: $0) }
     }
 }
+
+public struct FirstAppIntentPackage: AppIntentsPackage {}

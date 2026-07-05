@@ -1,29 +1,29 @@
 import SwiftUI
 
-/// Displays the ``ReindexLog`` entries recorded by ``TodoIndexer``, so the
-/// timing of each reindex (full, partial, or delete-all) can be inspected.
-struct ReindexLogScreen: View {
-    private let repository = ReindexLogRepository()
+/// Displays the ``Log`` entries recorded across the app (e.g. `AppEntity`
+/// query methods), so the timing of each call can be inspected.
+struct LogScreen: View {
+    private let repository = LogRepository()
 
-    @State private var logs: [ReindexLog] = []
+    @State private var logs: [Log] = []
 
     var body: some View {
         NavigationStack {
             List {
                 if logs.isEmpty {
                     ContentUnavailableView(
-                        "No Reindex Logs",
+                        "No Logs",
                         systemImage: "clock.arrow.circlepath",
-                        description: Text("Reindex calls will appear here.")
+                        description: Text("Recorded calls will appear here.")
                     )
                 } else {
                     // Newest first.
                     ForEach(logs.reversed()) { log in
-                        ReindexLogRow(log: log)
+                        LogRow(log: log)
                     }
                 }
             }
-            .navigationTitle("Reindex Log")
+            .navigationTitle("Log")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: clear) {
@@ -49,16 +49,16 @@ struct ReindexLogScreen: View {
     }
 }
 
-/// A single row describing one reindex call.
-private struct ReindexLogRow: View {
-    let log: ReindexLog
+/// A single row describing one logged call.
+private struct LogRow: View {
+    let log: Log
 
     var body: some View {
         HStack {
-            Image(systemName: icon)
-                .foregroundStyle(color)
+            Image(systemName: "clock.arrow.circlepath")
+                .foregroundStyle(.blue)
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
+                Text(log.callerName)
                     .font(.headline)
                 Text(log.date, format: .dateTime.year().month().day().hour().minute().second())
                     .font(.caption)
@@ -71,35 +71,8 @@ private struct ReindexLogRow: View {
         }
         .padding(.vertical, 4)
     }
-
-    private var title: String {
-        switch log.kind {
-        case .entities: "entities(for:)"
-        case .suggested: "suggestedEntities()"
-        case .reindex: "reindexEntities(for:)"
-        case .reindexAll: "reindexAllEntities()"
-        }
-    }
-
-    private var icon: String {
-        switch log.kind {
-        case .entities: "magnifyingglass"
-        case .suggested: "lightbulb"
-        case .reindex: "arrow.triangle.2.circlepath.circle"
-        case .reindexAll: "arrow.triangle.2.circlepath"
-        }
-    }
-
-    private var color: Color {
-        switch log.kind {
-        case .entities: .blue
-        case .suggested: .orange
-        case .reindex: .green
-        case .reindexAll: .purple
-        }
-    }
 }
 
 #Preview {
-    ReindexLogScreen()
+    LogScreen()
 }

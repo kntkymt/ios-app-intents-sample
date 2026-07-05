@@ -1,0 +1,34 @@
+load("@build_bazel_rules_apple//apple:ios.bzl", "ios_extension")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+
+swift_library(
+    name = "IntentsExtensionLib",
+    srcs = [
+        "IntentsExtension.swift",
+    ],
+    linkopts = ["-Wl,-framework,AppIntents"],
+    module_name = "IntentsExtension",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//Sources/Intermediate:Intermediate",
+    ],
+)
+
+ios_extension(
+    name = "IntentsExtension",
+    app_intents = [
+        ":IntentsExtensionLib",
+    ],
+    bundle_id = "kntk.bazelmultiappintents.IntentsExtension",
+    extensionkit_extension = True,
+    families = [
+        "iphone",
+        "ipad",
+    ],
+    infoplists = ["Info.plist"],
+    minimum_os_version = "18.0",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":IntentsExtensionLib",
+    ],
+)

@@ -24,3 +24,5 @@ public struct TransitiveSearchIntent: ShowInAppSearchResultsIntent {
         .result()
     }
 }
+
+public struct SecondAppIntentPackage: AppIntentsPackage {}

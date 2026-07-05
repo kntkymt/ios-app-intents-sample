@@ -4,7 +4,7 @@ import Foundation
 /// The list a ``TodoEntity`` belongs to, conforming to the `reminders` domain
 /// `list` schema. This sample uses a single, fixed default list.
 @AppEntity(schema: .reminders.list)
-struct ListEntity: IndexedEntity {
+struct ListEntity {
     static let defaultQuery = ListEntityQuery()
 
     let id: String

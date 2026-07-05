@@ -33,6 +33,10 @@ struct AppScreenEntity: AppEntity {
     static let defaultQuery = AppScreenQuery()
     static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Screen")
 
+    static var isAssistantOnly: Bool {
+        true
+    }
+
     /// The underlying `AppEnum` value this entity represents.
     let screen: AppScreen
 
